@@ -1,3 +1,4 @@
+"""Path constants and the security-type fallback set shared across M0-M7."""
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
