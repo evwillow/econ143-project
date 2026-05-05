@@ -3,3 +3,8 @@ __pycache__/
 .ipynb_checkpoints/
 data/raw/
 .venv
+
+# m0-m6 emit per-stage validation reports under reports/ as a side effect of
+# running. The grader's deliverable is writeup.ipynb at the repo root --
+# reports/ is treated as ephemeral pipeline output, not committed.
+reports/
