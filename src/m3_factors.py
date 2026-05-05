@@ -328,6 +328,103 @@ def _build_design_matrix(
     return X, col_names
 
 
+def residualize(
+    setups_with_factors: pl.DataFrame,
+    train_start: _date,
+    train_end: _date,
+) -> tuple[pl.DataFrame, dict]:
+    """Apply M3 factor + sector + year FE residualization with a configurable
+    training window.
+
+    Caller must have already enriched `setups_with_factors` with:
+      - fwd_ret_20d (and fwd_end_date)
+      - mkt_rf_window, smb_window, hml_window, umd_window
+      - sector
+      - vol_contraction_ratio
+
+    Workflow (matches the canonical M3 logic, only the train_start/train_end
+    are parameterised):
+      1. Drop rows missing fwd_ret_20d or any factor-window col.
+      2. Add `year` (cheap; idempotent).
+      3. Encode sector + year dummies using only training-window observed
+         categories. Sector reference = most-populated training sector.
+         Year reference = earliest training year. OOS rows in unseen years
+         get all year dummies = 0 (mapped to the reference year).
+      4. Fit OLS y = α + β·X_factors + δ·sector + γ·year on training rows.
+      5. Compute residuals for ALL rows by applying the fitted coefficients
+         (year dummies for non-training years are 0, so OOS rows pick up the
+         reference-year intercept).
+      6. Compute training-window p99 of vol_contraction_ratio; cap to produce
+         `vol_contraction_ratio_w`.
+
+    Returns (df_with_residuals, fit_info_dict). Pure compute; writes nothing.
+    Used by _residualize_main (canonical 2010-2017) and by m5 (expanding
+    windows 2010..(y-1) for y ∈ {2018..2025})."""
+    fit_setups = setups_with_factors.filter(
+        pl.col("fwd_ret_20d").is_not_null()
+        & pl.all_horizontal([pl.col(c).is_not_null() for c in FACTOR_WINDOW_COLS])
+    )
+    n_dropped = setups_with_factors.height - fit_setups.height
+
+    if "year" not in fit_setups.columns:
+        fit_setups = fit_setups.with_columns(
+            pl.col("date").dt.year().alias("year")
+        )
+
+    train_mask = (fit_setups["date"] >= train_start) & (fit_setups["date"] <= train_end)
+    train_df = fit_setups.filter(train_mask)
+    if train_df.height == 0:
+        raise ValueError(
+            f"residualize: no training rows in window [{train_start}, {train_end}]"
+        )
+
+    sectors_train = sorted(train_df["sector"].unique().to_list())
+    years_train   = sorted(train_df["year"].unique().to_list())
+    sector_ref = max(sectors_train, key=lambda s: int((train_df["sector"] == s).sum()))
+    year_ref = min(years_train)
+
+    X_full, col_names = _build_design_matrix(
+        fit_setups, sectors_train, years_train, sector_ref, year_ref
+    )
+    y_full = fit_setups["fwd_ret_20d"].to_numpy()
+
+    train_idx = np.flatnonzero(train_mask.to_numpy())
+    X_train = X_full[train_idx]
+    y_train = y_full[train_idx]
+
+    ols = sm.OLS(y_train, X_train).fit()
+
+    fitted_full = X_full @ ols.params
+    resid_full  = y_full - fitted_full
+    fit_setups = fit_setups.with_columns(
+        pl.Series("fwd_ret_20d_resid", resid_full),
+    )
+
+    p99 = float(train_df["vol_contraction_ratio"].quantile(WINSOR_Q))
+    fit_setups = fit_setups.with_columns(
+        pl.min_horizontal([pl.col("vol_contraction_ratio"), pl.lit(p99)])
+        .alias("vol_contraction_ratio_w")
+    )
+
+    fit_info = {
+        "ols": ols,
+        "rsquared": float(ols.rsquared),
+        "rsquared_adj": float(ols.rsquared_adj),
+        "col_names": col_names,
+        "sectors_train": sectors_train,
+        "years_train": years_train,
+        "sector_ref": sector_ref,
+        "year_ref": year_ref,
+        "p99_vcr_train": p99,
+        "n_train": int(X_train.shape[0]),
+        "n_dropped": n_dropped,
+        "train_idx": train_idx,
+        "resid_full": resid_full,
+        "train_resid_mean": float(resid_full[train_idx].mean()) if train_idx.size else float("nan"),
+    }
+    return fit_setups, fit_info
+
+
 def _residualize_main() -> None:
     print(f"[M3] reading M2 setups: {M2_PATH}")
     setups = pl.read_parquet(M2_PATH)
@@ -353,70 +450,23 @@ def _residualize_main() -> None:
         print(f"[M3] WARN: {n_missing_factors:,} rows have NaN factor-window sums "
               "(setup date or fwd_end_date not in factor panel)")
 
-    # Drop rows missing fwd_ret_20d OR factor windows -- can't residualize them
-    fit_setups = setups.filter(
-        pl.col("fwd_ret_20d").is_not_null()
-        & pl.all_horizontal([pl.col(c).is_not_null() for c in FACTOR_WINDOW_COLS])
-    )
-    n_dropped_for_residual = setups.height - fit_setups.height
+    # ---- Steps 3-6 (canonical 2010-2017 training window) ----
+    print(f"[M3] residualizing on training window [{TRAIN_START}, {TRAIN_END}]...", flush=True)
+    fit_setups, info = residualize(setups, TRAIN_START, TRAIN_END)
+    n_dropped_for_residual = info["n_dropped"]
     print(f"[M3] {fit_setups.height:,} rows usable for residualization "
           f"({n_dropped_for_residual:,} cannot be scored)")
+    print(f"[M3] sector reference: '{info['sector_ref']}'  |  year reference: {info['year_ref']}")
+    print(f"[M3] OLS fit: n={info['n_train']:,}, k={len(info['col_names']):,}")
+    print(f"[M3] R^2={info['rsquared']:.4f}  Adj R^2={info['rsquared_adj']:.4f}")
+    print(f"[M3] training residual mean: {info['train_resid_mean']:+.6f} "
+          f"({'PASS' if abs(info['train_resid_mean']) <= 1e-3 else 'FAIL'} |x|<=1e-3)")
+    print(f"[M3] vol_contraction_ratio training p{int(WINSOR_Q*100)} = {info['p99_vcr_train']:.4f}")
 
-    fit_setups = fit_setups.with_columns(
-        pl.col("date").dt.year().alias("year")
-    )
-
-    # ---- Step 3: train/OOS split ----
     train_mask = (fit_setups["date"] >= TRAIN_START) & (fit_setups["date"] <= TRAIN_END)
     train_df = fit_setups.filter(train_mask)
     oos_df   = fit_setups.filter(~train_mask)
     print(f"[M3] train (2010-2017): {train_df.height:,}  |  OOS (2018-2025): {oos_df.height:,}")
-
-    # ---- Step 4: design matrix encoding ----
-    sectors_train = sorted(train_df["sector"].unique().to_list())
-    years_train   = sorted(train_df["year"].unique().to_list())
-    if not sectors_train:
-        raise SystemExit("[M3] no sectors in training set — aborting")
-    if not years_train:
-        raise SystemExit("[M3] no years in training set — aborting")
-    # Reference categories: pick the most-populated sector for stability,
-    # and the earliest year (2010 by inspection).
-    sector_ref = max(sectors_train, key=lambda s: int((train_df["sector"] == s).sum()))
-    year_ref = min(years_train)
-    print(f"[M3] sector reference: '{sector_ref}'  |  year reference: {year_ref}")
-
-    X_full, col_names = _build_design_matrix(
-        fit_setups, sectors_train, years_train, sector_ref, year_ref
-    )
-    y_full = fit_setups["fwd_ret_20d"].to_numpy()
-
-    train_idx = np.flatnonzero(train_mask.to_numpy())
-    X_train = X_full[train_idx]
-    y_train = y_full[train_idx]
-
-    print(f"[M3] OLS fit: n={X_train.shape[0]:,}, k={X_train.shape[1]:,}")
-    ols = sm.OLS(y_train, X_train).fit()
-    print(f"[M3] R^2={ols.rsquared:.4f}  Adj R^2={ols.rsquared_adj:.4f}")
-
-    # ---- Step 5: residuals via training betas, applied to all rows ----
-    fitted_full = X_full @ ols.params
-    resid_full  = y_full - fitted_full
-    fit_setups = fit_setups.with_columns(
-        pl.Series("fwd_ret_20d_resid", resid_full),
-    )
-
-    # Sanity: training residuals should be ~mean-0
-    train_resid_mean = float(resid_full[train_idx].mean())
-    print(f"[M3] training residual mean: {train_resid_mean:+.6f} "
-          f"({'PASS' if abs(train_resid_mean) <= 1e-3 else 'FAIL'} |x|<=1e-3)")
-
-    # ---- Step 6: winsorize vol_contraction_ratio at training p99 ----
-    p99 = float(train_df["vol_contraction_ratio"].quantile(WINSOR_Q))
-    print(f"[M3] vol_contraction_ratio training p{int(WINSOR_Q*100)} = {p99:.4f}")
-    fit_setups = fit_setups.with_columns(
-        pl.min_horizontal([pl.col("vol_contraction_ratio"), pl.lit(p99)])
-        .alias("vol_contraction_ratio_w")
-    )
 
     # ---- Output ----
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -428,18 +478,18 @@ def _residualize_main() -> None:
         out_df=fit_setups,
         train_df=train_df,
         oos_df=oos_df,
-        ols_result=ols,
-        col_names=col_names,
-        sector_ref=sector_ref,
-        year_ref=year_ref,
-        sectors_train=sectors_train,
-        years_train=years_train,
-        winsor_p99=p99,
+        ols_result=info["ols"],
+        col_names=info["col_names"],
+        sector_ref=info["sector_ref"],
+        year_ref=info["year_ref"],
+        sectors_train=info["sectors_train"],
+        years_train=info["years_train"],
+        winsor_p99=info["p99_vcr_train"],
         drops=drops,
         n_missing_factors=n_missing_factors,
         n_dropped_for_residual=n_dropped_for_residual,
-        resid_full=resid_full,
-        train_idx=train_idx,
+        resid_full=info["resid_full"],
+        train_idx=info["train_idx"],
     )
     print(f"[M3] wrote {VALIDATION_MD}")
 
