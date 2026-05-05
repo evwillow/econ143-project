@@ -3,11 +3,11 @@ M4 — OLS + Quantile Regression estimation on the 2010-2017 training window.
 
 Inputs
 ------
-data/interim/setups_with_residuals.parquet  (M3 output)
+data/m3_setups_with_residuals.parquet  (M3 output)
 
 Outputs
 -------
-data/interim/m4_results.parquet  — long-form coefficient table
+data/m4_results.parquet  — long-form coefficient table
 reports/m4_estimation.md         — readable validation report
 
 Design (per task brief; pre-registered hypothesis in writeup.md §6):
@@ -31,8 +31,8 @@ import polars as pl
 import statsmodels.api as sm
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-M3_PATH = REPO_ROOT / "data" / "interim" / "setups_with_residuals.parquet"
-OUT_PARQUET = REPO_ROOT / "data" / "interim" / "m4_results.parquet"
+M3_PATH = REPO_ROOT / "data" / "m3_setups_with_residuals.parquet"
+OUT_PARQUET = REPO_ROOT / "data" / "m4_results.parquet"
 REPORT_MD = REPO_ROOT / "reports" / "m4_estimation.md"
 
 TRAIN_START = _date(2010, 1, 1)
@@ -334,8 +334,8 @@ def _write_report(
     lines.append(
         "- **Determinism**: `sm.OLS(...).fit()` and `sm.QuantReg(...).fit(q=τ)` "
         "are both deterministic given fixed input and tau. Re-running the "
-        "script on the same `data/interim/setups_with_residuals.parquet` "
-        "yields byte-identical `data/interim/m4_results.parquet`."
+        "script on the same `data/m3_setups_with_residuals.parquet` "
+        "yields byte-identical `data/m4_results.parquet`."
     )
     lines.append("")
 

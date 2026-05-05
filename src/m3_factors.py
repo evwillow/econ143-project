@@ -3,12 +3,12 @@ setups.
 
 Two responsibilities live in this module:
   1. Build the daily factor panel (date, mkt_rf, smb, hml, umd, rf in decimal
-     form) -> data/factors/ff3_umd_daily.parquet.  (Original purpose; idempotent.)
+     form) -> data/ff3_umd_daily.parquet.  (Original purpose; idempotent.)
   2. Compute fwd_ret_20d per setup, residualize against the FF3+UMD factors
      (cumulated over [t+1, t+20]) plus sector + year fixed effects on the
      2010-2017 training window, and apply the same fitted coefficients to
      2018-2025 OOS rows. Winsorize vol_contraction_ratio at training-window
-     p99 -> data/interim/setups_with_residuals.parquet.
+     p99 -> data/m3_setups_with_residuals.parquet.
 
 Run with `python src/m3_factors.py` -- step 1 only fires if the factor panel
 parquet is missing; step 2 always runs. Validation goes to
@@ -34,13 +34,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from utils import DAILY_BARS_GLOB  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FACTORS_DIR = REPO_ROOT / "data" / "factors"
-RAW_DIR = FACTORS_DIR / "raw"
-OUTPUT_PATH = FACTORS_DIR / "ff3_umd_daily.parquet"
+DATA_DIR = REPO_ROOT / "data"
+# Ken French source zips and the parsed panel both live at data/ root after
+# the flatten. RAW_DIR aliases DATA_DIR so download_factors() keeps working.
+FACTORS_DIR = DATA_DIR
+RAW_DIR = DATA_DIR
+OUTPUT_PATH = DATA_DIR / "ff3_umd_daily.parquet"
 
 # Step 2 paths
-M2_PATH = REPO_ROOT / "data" / "interim" / "setups_with_features.parquet"
-OUT_PATH = REPO_ROOT / "data" / "interim" / "setups_with_residuals.parquet"
+M2_PATH = DATA_DIR / "m2_setups_with_features.parquet"
+OUT_PATH = DATA_DIR / "m3_setups_with_residuals.parquet"
 VALIDATION_MD = REPO_ROOT / "reports" / "m3_validation.md"
 
 # Training / OOS split per writeup §6
@@ -586,8 +589,8 @@ def _write_validation(
     lines.append("# M3 — Forward Returns + Factor Residualization Validation")
     lines.append("")
     lines.append(
-        "Inputs: M2 setups (`data/interim/setups_with_features.parquet`, "
-        f"{n_in:,} rows). Outputs: `data/interim/setups_with_residuals.parquet` "
+        "Inputs: M2 setups (`data/m2_setups_with_features.parquet`, "
+        f"{n_in:,} rows). Outputs: `data/m3_setups_with_residuals.parquet` "
         f"({n_out:,} rows after dropping setups missing fwd_ret_20d or factor "
         "window data) plus per-row residuals + winsorized "
         "`vol_contraction_ratio_w`."
@@ -793,7 +796,7 @@ def _write_validation(
     lines.append(
         "- **Determinism**: same input parquets -> same output parquet. The "
         "factor panel is not refetched if it already exists at "
-        "`data/factors/ff3_umd_daily.parquet`."
+        "`data/ff3_umd_daily.parquet`."
     )
     lines.append("")
 

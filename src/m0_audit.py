@@ -53,7 +53,7 @@ flagged as suspect coverage.
 Inputs : data/raw/stocks/daily  (parquets via utils.py paths)
          data/raw/corporate_actions/splits.parquet (optional)
 Outputs: reports/audit.md
-         data/interim/audit_summary.json
+         data/m0_audit_summary.json
 """
 
 from __future__ import annotations
@@ -77,7 +77,7 @@ MIN_TRADING_DAYS_PER_YEAR = 200
 SUSPICIOUS_MOVE_THRESHOLD = 0.5
 
 AUDIT_MD = REPO_ROOT / "reports" / "audit.md"
-AUDIT_JSON = REPO_ROOT / "data" / "interim" / "audit_summary.json"
+AUDIT_JSON = REPO_ROOT / "data" / "m0_audit_summary.json"
 
 
 # ---------------------------------------------------------------------------

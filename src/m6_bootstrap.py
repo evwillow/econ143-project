@@ -23,7 +23,7 @@ Procedures here:
            window panel (per M5's findings: effect grew through 2025).
 
 Outputs:
-  data/interim/m6_bootstrap.parquet   — long-form per-draw diffs + metadata
+  data/m6_bootstrap.parquet   — long-form per-draw diffs + metadata
   reports/m6_inference.md             — per-panel stats, CIs, placebo, verdict
 """
 from __future__ import annotations
@@ -42,9 +42,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import m3_factors  # noqa: E402  (re-uses fwd-return / factor-window / residualize helpers)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-M2_PATH = REPO_ROOT / "data" / "interim" / "setups_with_features.parquet"
-FF_PATH = REPO_ROOT / "data" / "factors"   / "ff3_umd_daily.parquet"
-OUT_PARQUET = REPO_ROOT / "data" / "interim" / "m6_bootstrap.parquet"
+M2_PATH = REPO_ROOT / "data" / "m2_setups_with_features.parquet"
+FF_PATH = REPO_ROOT / "data" / "ff3_umd_daily.parquet"
+OUT_PARQUET = REPO_ROOT / "data" / "m6_bootstrap.parquet"
 REPORT_MD   = REPO_ROOT / "reports" / "m6_inference.md"
 
 # ---- Knobs ----

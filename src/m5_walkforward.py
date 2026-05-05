@@ -22,13 +22,13 @@ is the §6 prereg's "≥ 5 of 8 expanding-window OOS years" requirement.
 
 Inputs
 ------
-data/interim/setups_with_features.parquet
-data/factors/ff3_umd_daily.parquet
+data/m2_setups_with_features.parquet
+data/ff3_umd_daily.parquet
 breakoutStudyTool/.../daily/*.parquet  (for fwd-return close lookup)
 
 Outputs
 -------
-data/interim/m5_oos_results.parquet
+data/m5_oos_results.parquet
 reports/m5_walkforward.md
 """
 from __future__ import annotations
@@ -46,9 +46,9 @@ import m3_factors  # noqa: E402   (re-uses _load_ticker_closes, _compute_forward
                    #               _attach_factor_window_sums, residualize)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-M2_PATH = REPO_ROOT / "data" / "interim" / "setups_with_features.parquet"
-FF_PATH = REPO_ROOT / "data" / "factors"   / "ff3_umd_daily.parquet"
-OUT_PARQUET = REPO_ROOT / "data" / "interim" / "m5_oos_results.parquet"
+M2_PATH = REPO_ROOT / "data" / "m2_setups_with_features.parquet"
+FF_PATH = REPO_ROOT / "data" / "ff3_umd_daily.parquet"
+OUT_PARQUET = REPO_ROOT / "data" / "m5_oos_results.parquet"
 REPORT_MD   = REPO_ROOT / "reports" / "m5_walkforward.md"
 
 TRAIN_START = _date(2010, 1, 1)

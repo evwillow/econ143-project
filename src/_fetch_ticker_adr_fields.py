@@ -1,15 +1,15 @@
 """
-One-off helper to AUGMENT data/interim/reference/yfinance_types.parquet with
+One-off helper to AUGMENT data/yfinance_types.parquet with
 the fields needed for the ADR exclusion in M1's _load_non_equity_set:
 
   - country (e.g. "United States", "Brazil")
   - long_name (e.g. "Embraer S.A. American Depositary Shares")
 
 Refetches `.info` for every unique ticker in the current
-data/interim/setups.parquet, preserving any existing rows that aren't in the
+data/m1_setups.parquet, preserving any existing rows that aren't in the
 new fetch list. Resumable: re-reads the cache and skips tickers that already
 have BOTH country AND long_name filled (i.e., were fetched after this script
-ran). Failures are appended to data/interim/reference/yfinance_failures.csv.
+ran). Failures are appended to data/yfinance_failures.csv.
 
 Run with `python src/_fetch_ticker_adr_fields.py`.
 """
@@ -27,7 +27,7 @@ import yfinance as yf
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from utils import REFERENCE_DIR, TICKER_TYPES_FAILURES, TICKER_TYPES_PARQUET  # noqa: E402
 
-SETUPS_PATH = Path(__file__).resolve().parents[1] / "data" / "interim" / "setups.parquet"
+SETUPS_PATH = Path(__file__).resolve().parents[1] / "data" / "m1_setups.parquet"
 
 SLEEP_SECONDS = 0.25
 CHECKPOINT_EVERY = 50

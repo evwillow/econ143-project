@@ -91,7 +91,7 @@ START_DATE = date(2010, 1, 1)
 END_DATE = date(2025, 12, 31)
 LOOKBACK_START = date(2008, 1, 1)
 
-OUT_PARQUET = REPO_ROOT / "data" / "interim" / "setups.parquet"
+OUT_PARQUET = REPO_ROOT / "data" / "m1_setups.parquet"
 VALIDATION_MD = REPO_ROOT / "reports" / "m1_validation.md"
 SAMPLE_CSV = REPO_ROOT / "reports" / "m1_sample_setups.csv"
 
@@ -1226,7 +1226,7 @@ def _write_validation(
         "- **Reference-table location deviates from spec.** "
         "`data/raw/reference/` is a Windows junction we can't write through "
         "(see M0 audit); `yfinance_types.parquet` lives in "
-        "`data/interim/reference/` instead."
+        "`data/` instead."
     )
     lines.append(
         "- **yfinance type coverage is partial.** Source: "

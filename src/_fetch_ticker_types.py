@@ -1,6 +1,6 @@
 """
 One-off helper: fetch quoteType from yfinance for every ticker that appeared
-in data/interim/setups.parquet and cache the result so M1 can drop non-equity
+in data/m1_setups.parquet and cache the result so M1 can drop non-equity
 issuers (ETFs, ADRs, units, warrants, etc.) without contacting the network on
 each rerun.
 
@@ -25,7 +25,7 @@ import yfinance as yf
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from utils import REFERENCE_DIR, TICKER_TYPES_FAILURES, TICKER_TYPES_PARQUET  # noqa: E402
 
-SETUPS_PATH = Path(__file__).resolve().parents[1] / "data" / "interim" / "setups.parquet"
+SETUPS_PATH = Path(__file__).resolve().parents[1] / "data" / "m1_setups.parquet"
 
 SLEEP_SECONDS = 0.5
 CHECKPOINT_EVERY = 50

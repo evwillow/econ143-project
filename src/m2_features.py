@@ -3,14 +3,14 @@ M2 — per-setup feature computation.
 
 Inputs
 ------
-data/interim/setups.parquet                 — M1 output (Round 2 detector)
+data/m1_setups.parquet                 — M1 output (Round 2 detector)
 breakoutStudyTool/data/pipeline/stocks/.../*.parquet — daily OHLCV bars
-data/interim/reference/yfinance_types.parquet       — for sector lookup
-data/interim/spy_daily.parquet              — cached SPY (fetched once if absent)
+data/yfinance_types.parquet       — for sector lookup
+data/spy_daily.parquet              — cached SPY (fetched once if absent)
 
 Outputs
 -------
-data/interim/setups_with_features.parquet   — M1 setups + 5 new feature columns
+data/m2_setups_with_features.parquet   — M1 setups + 5 new feature columns
 reports/m2_validation.md                    — NaN audit, distributions, sanity-check
 
 Features (all computed over the consolidation window
@@ -36,7 +36,7 @@ NOT written and the validation report flags the failure so the user can
 investigate. (Per task brief.)
 
 Deterministic. The only network call is the one-time SPY fetch when
-data/interim/spy_daily.parquet is absent.
+data/spy_daily.parquet is absent.
 """
 
 from __future__ import annotations
@@ -59,10 +59,10 @@ from utils import (  # noqa: E402
 # Paths & constants
 # ---------------------------------------------------------------------------
 
-SETUPS_PARQUET = REPO_ROOT / "data" / "interim" / "setups.parquet"
-OUT_PARQUET = REPO_ROOT / "data" / "interim" / "setups_with_features.parquet"
+SETUPS_PARQUET = REPO_ROOT / "data" / "m1_setups.parquet"
+OUT_PARQUET = REPO_ROOT / "data" / "m2_setups_with_features.parquet"
 VALIDATION_MD = REPO_ROOT / "reports" / "m2_validation.md"
-SPY_PARQUET = REPO_ROOT / "data" / "interim" / "spy_daily.parquet"
+SPY_PARQUET = REPO_ROOT / "data" / "spy_daily.parquet"
 
 SPY_FETCH_START = date(2008, 1, 1)
 SPY_FETCH_END   = date(2026, 3, 1)
@@ -89,7 +89,7 @@ EXPECTED_RANGES = {
 
 def _load_or_fetch_spy() -> pl.DataFrame:
     """Return SPY daily DataFrame with columns (date: pl.Date, close: pl.Float64),
-    sorted by date. Caches to data/interim/spy_daily.parquet on first run."""
+    sorted by date. Caches to data/spy_daily.parquet on first run."""
     if SPY_PARQUET.exists():
         df = pl.read_parquet(SPY_PARQUET)
         print(f"[M2] loaded SPY from cache: {df.height:,} bars "
@@ -291,7 +291,7 @@ def _write_validation(
     lines.append("# M2 — Per-Setup Feature Validation")
     lines.append("")
     lines.append(
-        "Inputs: M1 setups (`data/interim/setups.parquet`, "
+        "Inputs: M1 setups (`data/m1_setups.parquet`, "
         f"{n_in:,} rows: "
         f"{int((setups_in['universe_variant']=='strict').sum()):,} strict + "
         f"{int((setups_in['universe_variant']=='loose').sum()):,} loose)."
@@ -483,7 +483,7 @@ def _write_validation(
     )
     lines.append(
         "- **Sector**: from yfinance `.info['sector']` cached at "
-        "`data/interim/reference/yfinance_types.parquet`. Tickers whose "
+        "`data/yfinance_types.parquet`. Tickers whose "
         "yfinance fetch failed (~119 of 1,773 in the M1 cache) get sector = "
         "'Unknown'. M2 doesn't refetch."
     )
